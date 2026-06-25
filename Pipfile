@@ -1,0 +1,26 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+django = "<5.1,>=5.0"
+djangorestframework = "<3.16,>=3.15"
+django-cors-headers = "<4.4,>=4.3"
+psycopg2-binary = "<3.0,>=2.9"
+cloudinary = "<2.0,>=1.36"
+django-cloudinary-storage = "<0.4,>=0.3"
+djangorestframework-simplejwt = "<6.0,>=5.3"
+pillow = "<11.0,>=10.3"
+django-filter = "<25.0,>=24.2"
+gunicorn = "==22.0.0"
+whitenoise = "==6.6.0"
+django-storages = "==1.14.2"
+python-dotenv = "*"
+djangorestframework-stubs = "*"
+python-dateutil = "*"
+
+[dev-packages]
+
+[requires]
+python_version = "3.12"

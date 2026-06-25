@@ -1,0 +1,15 @@
+# Minimal requirements.txt
+Django>=5.0,<5.1
+djangorestframework>=3.15,<3.16
+django-cors-headers>=4.3,<4.4
+psycopg2-binary>=2.9,<3.0
+cloudinary>=1.36,<2.0
+django-cloudinary-storage>=0.3,<0.4
+djangorestframework-simplejwt>=5.3,<6.0
+python-dotenv>=1.0,<2.0
+Pillow>=10.3,<11.0
+django-filter>=24.2,<25.0
+# Production specific
+gunicorn==22.0.0  # WSGI server
+whitenoise==6.6.0  # Static file serving
+django-storages==1.14.2  # If using AWS S3 instead of Cloudinary
