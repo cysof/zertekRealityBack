@@ -66,6 +66,7 @@ class PropertySerializer(serializers.ModelSerializer):
         required=False
     )
     image_url = serializers.SerializerMethodField()
+    video_url = serializers.SerializerMethodField()
     price_label = serializers.SerializerMethodField()
     property_type = serializers.SerializerMethodField()
 
@@ -86,6 +87,8 @@ class PropertySerializer(serializers.ModelSerializer):
             'status',
             'image',
             'image_url',
+            'video',
+            'video_url',
             'description',
             'amenities',
             'agent',
@@ -96,9 +99,10 @@ class PropertySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'updated_at']
 
     def get_image_url(self, obj):
-        if obj.image:
-            return obj.image.url
-        return None
+        return obj.image.url if obj.image else None
+
+    def get_video_url(self, obj):
+        return obj.video.url if obj.video else None
 
     def get_price_label(self, obj):
         if obj.price >= 1000000:
@@ -107,7 +111,8 @@ class PropertySerializer(serializers.ModelSerializer):
 
     def get_property_type(self, obj):
         return "For Sale"
-
+    
+    
 
 class InquirySerializer(serializers.ModelSerializer):
     """

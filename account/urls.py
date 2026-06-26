@@ -10,7 +10,7 @@ from .views import (
     ApplyAffiliateView,
     AgentProfileView,
     AffiliateProfileView,
-    AgentListView
+    AgentListView,
 )
 
 urlpatterns = [

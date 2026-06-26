@@ -19,7 +19,9 @@ router.register(r'land-banking-agreements', LandBankingAgreementViewSet, basenam
 router.register(r'payments', PaymentViewSet, basename='payment')
 router.register(r'payment-reminders', PaymentReminderViewSet, basename='payment-reminder')
 
+
 urlpatterns = [
     path('', include(router.urls)),  # This includes the router at the root
     path('agent/stats/', AgentPropertyStatsView.as_view(), name='agent-property-stats'),
+    # path('agent/profile/', AgentProfileUpdateView.as_view(), name='agent-profile-update'),
 ]

@@ -5,10 +5,25 @@ from django.core.validators import MinValueValidator
 from cloudinary.models import CloudinaryField
 from account.models import User, AgentProfile
 
+from django.core.exceptions import ValidationError
+
 DOCUMENT_TYPE = [
-    ('co', 'C of O'),
-    ('ro', 'R of O')
+    ('C of O', 'C of O'),
+    ('R of O', 'R of O'),
+    ('Deed of Assignment', 'Deed of Assignment'),
+    ('Survey Plan', 'Survey Plan'),
+    ('Governor Consent','Governor Consent'),
+    ('Gazette','Gazette'),
+    ('Excision', 'Excision'),
+    ('Freehold', 'Freehold'),
+
+    
+
 ]
+
+def validate_video_size(value):
+    if hasattr(value, 'size') and value.size > 10 * 1024 * 1024:
+        raise ValidationError('Video file size must not exceed 10MB.')
 
 
 class Property(models.Model):
@@ -28,23 +43,29 @@ class Property(models.Model):
         max_digits=15, decimal_places=2,
         validators=[MinValueValidator(0)]
     )
-    title_document = models.CharField(max_length=16, choices=DOCUMENT_TYPE)
+    title_document = models.CharField(max_length=64, choices=DOCUMENT_TYPE)
     sqft = models.IntegerField(validators=[MinValueValidator(0)])
     is_new = models.BooleanField(default=False)
     is_featured = models.BooleanField(default=False)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='available')
     image = CloudinaryField('image', folder='zertek/properties/', null=True, blank=True)
+    video = CloudinaryField(
+        'video',
+        resource_type='video',
+        folder='zertek/properties/videos/',
+        null=True,
+        blank=True,
+        validators=[validate_video_size]
+    )
     description = models.TextField()
     amenities = models.JSONField(default=list)
 
-    # Listing agent — points directly at the agent's account profile.
-    # No more separate `api.Agent` model duplicating user/contact info.
     agent = models.ForeignKey(
         AgentProfile, on_delete=models.SET_NULL, null=True, blank=True, related_name='properties'
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    updated_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-created_at']
@@ -55,7 +76,6 @@ class Property(models.Model):
 
     def __str__(self):
         return self.title
-
 
 class Inquiry(models.Model):
     """

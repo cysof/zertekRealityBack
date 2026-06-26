@@ -1,19 +1,86 @@
 # agent/admin.py
 from django.contrib import admin
+from django import forms
+from django.db import models
 from .models import (
     Property, Inquiry, LandBankingPlan,
     LandBankingAgreement, Payment, PaymentReminder
 )
+from django.utils.html import format_html
+
+
+class PropertyAdminForm(forms.ModelForm):
+    """Custom form for Property admin with human-readable amenities"""
+
+    amenities = forms.CharField(
+        widget=forms.Textarea(attrs={
+            'rows': 4,
+            'cols': 50,
+            'style': 'width: 100%; font-family: monospace;',
+            'placeholder': 'Enter each amenity on a new line (e.g.\nSwimming Pool\n2 Car Garage\n24/7 Security)'
+        }),
+        required=False,
+        help_text='Enter each amenity on a new line. They will be stored as a JSON array.'
+    )
+
+    class Meta:
+        model = Property
+        fields = '__all__'
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk and self.instance.amenities:
+            if isinstance(self.instance.amenities, list):
+                self.initial['amenities'] = '\n'.join(self.instance.amenities)
+
+    def clean_amenities(self):
+        """Convert newline-separated text to JSON array"""
+        data = self.cleaned_data.get('amenities', '')
+        if isinstance(data, str):
+            items = [line.strip() for line in data.split('\n') if line.strip()]
+            return items
+        return data
+
+    def clean_video(self):
+        """Enforce 10MB limit at the form level"""
+        video = self.cleaned_data.get('video')
+        if video and hasattr(video, 'size') and video.size > 10 * 1024 * 1024:
+            raise forms.ValidationError('Video file size must not exceed 10MB.')
+        return video
+    
 
 
 @admin.register(Property)
 class PropertyAdmin(admin.ModelAdmin):
-    list_display = ['title', 'location', 'price', 'status', 'is_featured', 'is_new', 'agent', 'created_at']
-    list_filter = ['status', 'is_featured', 'is_new', 'title_document']
-    search_fields = ['title', 'location', 'address', 'description']
-    readonly_fields = ['created_at', 'updated_at']
-    ordering = ['-created_at']
-    autocomplete_fields = ['agent']
+    form = PropertyAdminForm
+    list_display = ['title', 'location', 'status', 'is_featured', 'is_new']
+    search_fields = ['title', 'location', 'address']  # add this
+    readonly_fields = ['video_preview']
+
+    fieldsets = (
+        ('Basic Info', {
+            'fields': ('title', 'location', 'address', 'description', 'status', 'title_document')
+        }),
+        ('Details', {
+            'fields': ('price', 'sqft', 'amenities', 'is_new', 'is_featured')
+        }),
+        ('Media', {
+            'fields': ('image', 'video', 'video_preview')
+        }),
+        ('Agent', {
+            'fields': ('agent',)
+        }),
+    )
+
+    def video_preview(self, obj):
+        if obj.video:
+            return format_html(
+                '<video width="400" controls><source src="{}" type="video/mp4"></video>',
+                obj.video.url
+            )
+        return "No video uploaded"
+    video_preview.short_description = "Video Preview"
+
 
 
 @admin.register(Inquiry)
@@ -43,9 +110,6 @@ class LandBankingAgreementAdmin(admin.ModelAdmin):
     ]
     list_filter = ['status', 'plan']
     search_fields = ['agreement_id', 'buyer_name', 'buyer_email', 'property__title']
-    # agreement_id, financial totals, and balance are computed at creation
-    # time by the serializer — they should never be hand-edited in admin,
-    # only adjusted through proper payment/cancellation flows.
     readonly_fields = [
         'agreement_id', 'total_price', 'down_payment', 'monthly_payment',
         'total_payable', 'balance_remaining', 'created_at', 'updated_at',

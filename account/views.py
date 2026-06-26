@@ -20,7 +20,6 @@ def get_client_ip(request):
     """Best-effort client IP extraction, accounting for reverse proxies."""
     forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if forwarded_for:
-        # First entry in the list is the original client.
         return forwarded_for.split(',')[0].strip()
     return request.META.get('REMOTE_ADDR')
 
@@ -43,9 +42,7 @@ class RegisterView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
         requested_role = request.data.get('requested_role', 'client')
-
         user = serializer.save(role='client')
-
         message = 'Registration successful!'
 
         if requested_role == 'agent':
@@ -63,10 +60,6 @@ class RegisterView(APIView):
 
         refresh = RefreshToken.for_user(user)
 
-        # Referral tracking — optional `referral_code` in the request body.
-        # Only approved affiliates can earn credit; an invalid/unapproved
-        # code is ignored silently rather than failing registration, since
-        # a bad referral link shouldn't block someone from signing up.
         referral_code = request.data.get('referral_code')
         if referral_code:
             try:
@@ -82,8 +75,6 @@ class RegisterView(APIView):
                 affiliate_profile.total_referrals = models.F('total_referrals') + 1
                 affiliate_profile.save(update_fields=['total_referrals'])
             except (AffiliateProfile.DoesNotExist, ValueError, django_exceptions.ValidationError):
-                # Invalid UUID format or no matching approved affiliate —
-                # don't block registration over a bad/expired referral link.
                 pass
 
         return Response({
@@ -96,7 +87,7 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     """
-    User login endpoint
+    User login endpoint.
     """
     permission_classes = [AllowAny]
 
@@ -135,7 +126,7 @@ class LoginView(APIView):
 
 class LogoutView(APIView):
     """
-    User logout endpoint (blacklist refresh token)
+    User logout endpoint (blacklist refresh token).
     """
     permission_classes = [IsAuthenticated]
 
@@ -153,28 +144,53 @@ class LogoutView(APIView):
             )
 
 
-class UserProfileView(APIView):
-    """
-    Get/Update current user profile.
 
-    NOTE: once serializers.py exists, make sure UserSerializer marks
-    `role`, `is_verified`, `is_affiliate`, `bvn`, and `nin` as read-only
-    (or excludes them) for this endpoint. Otherwise a user can PATCH
-    their own profile and self-promote to agent/self-verify.
-    """
+
+class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        serializer = UserSerializer(request.user)
-        return Response(serializer.data)
+        return Response(UserSerializer(request.user).data)
 
     def patch(self, request):
-        serializer = UserSerializer(request.user, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        user = request.user
+        errors = {}
+        user_fields_to_save = []
 
+        phone = request.data.get('phone')
+        address = request.data.get('address')
+
+        if phone is not None:
+            phone = phone.strip()
+            if len(phone) > 20:
+                errors['phone'] = 'Phone number must be 20 characters or fewer.'
+            else:
+                user.phone = phone
+                user_fields_to_save.append('phone')
+
+        if address is not None:
+            user.address = address.strip()
+            user_fields_to_save.append('address')
+
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        if user_fields_to_save:
+            user.save(update_fields=user_fields_to_save)
+
+        profile_picture = request.FILES.get('profile_picture')
+        if profile_picture:
+            if user.role == 'agent' and hasattr(user, 'agent_profile'):
+                user.agent_profile.profile_picture = profile_picture
+                user.agent_profile.save(update_fields=['profile_picture'])
+            elif user.role == 'affiliate' and hasattr(user, 'affiliate_profile'):
+                user.affiliate_profile.profile_picture = profile_picture
+                user.affiliate_profile.save(update_fields=['profile_picture'])
+            elif hasattr(user, 'profile_picture'):
+                user.profile_picture = profile_picture
+                user.save(update_fields=['profile_picture'])
+
+        return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
 
 class ApplyAgentView(APIView):
     """
@@ -206,8 +222,6 @@ class ApplyAgentView(APIView):
             linkedin_url=serializer.validated_data.get('linkedin_url', ''),
             whatsapp_url=serializer.validated_data.get('whatsapp_url', ''),
         )
-        # NOTE: agent_profile.is_approved defaults to False — user.role stays
-        # 'client' until an admin approves it (see account/signals.py).
 
         return Response({
             'message': 'Agent application submitted successfully! Please wait for admin approval.',
@@ -217,7 +231,7 @@ class ApplyAgentView(APIView):
 
 class ApplyAffiliateView(APIView):
     """
-    Apply to become an affiliate
+    Apply to become an affiliate.
     """
     permission_classes = [IsAuthenticated]
 
@@ -235,8 +249,6 @@ class ApplyAffiliateView(APIView):
         affiliate_profile = AffiliateProfile.objects.create(
             user=request.user
         )
-        # NOTE: is_approved defaults to False — user.role/is_affiliate stay
-        # unchanged until an admin approves it (see account/signals.py).
 
         return Response({
             'message': 'Affiliate application submitted successfully! Please wait for admin approval.',
@@ -270,10 +282,9 @@ class AffiliateProfileView(APIView):
         return Response(serializer.data)
 
 
-
 class AgentListView(APIView):
     """
-    Get list of all approved agents (public)
+    Get list of all approved agents (public).
     """
     permission_classes = [AllowAny]
 
@@ -281,3 +292,55 @@ class AgentListView(APIView):
         agents = AgentProfile.objects.filter(is_approved=True)
         serializer = AgentProfileSerializer(agents, many=True)
         return Response(serializer.data)
+
+
+# ---------------------------------------------------------------------------
+# AgentProfileUpdateView is kept as a strict agent-only alias in case you
+# need a separate endpoint scoped to /api/agent/profile/. It delegates to
+# the same logic but enforces the agent guard explicitly.
+# ---------------------------------------------------------------------------
+class AgentProfileUpdateView(APIView):
+    """
+    PATCH /api/agent/profile/
+
+    Strict alias of UserProfileUpdateView scoped to approved agents only.
+    Clients and affiliates will get 404 here — direct them to
+    PATCH /api/account/profile/ instead.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def patch(self, request):
+        user = request.user
+
+        # Hard guard — only approved agents reach the logic below.
+        agent_profile = get_object_or_404(AgentProfile, user=user, is_approved=True)
+
+        errors = {}
+        phone = request.data.get('phone')
+        address = request.data.get('address')
+        user_fields_to_save = []
+
+        if phone is not None:
+            phone = phone.strip()
+            if len(phone) > 20:
+                errors['phone'] = 'Phone number must be 20 characters or fewer.'
+            else:
+                user.phone = phone
+                user_fields_to_save.append('phone')
+
+        if address is not None:
+            user.address = address.strip()
+            user_fields_to_save.append('address')
+
+        if errors:
+            return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+        if user_fields_to_save:
+            user.save(update_fields=user_fields_to_save)
+
+        profile_picture = request.FILES.get('profile_picture')
+        if profile_picture:
+            agent_profile.profile_picture = profile_picture
+            agent_profile.save(update_fields=['profile_picture'])
+
+        return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
