@@ -24,6 +24,11 @@ from .permissions import (
     IsStaffOrApprovedAgent, IsStaffOrReadOnly, InquiryPermission, IsStaffOnly
 )
 
+from django.core.mail import send_mail
+from django.conf import settings
+
+
+
 
 class PropertyViewSet(viewsets.ModelViewSet):
     """
@@ -342,3 +347,27 @@ class AgentPropertyStatsView(APIView):
         }
 
         return Response(stats)
+    
+
+
+class ContactMessageView(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        name = request.data.get('name')
+        email = request.data.get('email')
+        phone = request.data.get('phone', 'N/A')
+        subject = request.data.get('subject')
+        message = request.data.get('message')
+
+        if not all([name, email, subject, message]):
+            return Response({'detail': 'All required fields must be filled.'}, status=400)
+
+        send_mail(
+            subject=f"Zertek Realty Home: {subject}",
+            message=f"Name: {name}\nEmail: {email}\nPhone: {phone}\n\nMessage:\n{message}",
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=['salesteam.zertekrealtyhomeltd@gmail.com','zertekrealityhome@gmail.com'],
+            fail_silently=False,
+        )
+        return Response({'detail': 'Message sent successfully.'}, status=200)

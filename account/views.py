@@ -159,6 +159,8 @@ class UserProfileView(APIView):
 
         phone = request.data.get('phone')
         address = request.data.get('address')
+        bvn = request.data.get('bvn')
+        nin = request.data.get('nin')
 
         if phone is not None:
             phone = phone.strip()
@@ -172,12 +174,29 @@ class UserProfileView(APIView):
             user.address = address.strip()
             user_fields_to_save.append('address')
 
+        # BVN — one-time only
+        if bvn is not None:
+            if user.bvn:
+                errors['bvn'] = 'BVN has already been set and cannot be changed.'
+            else:
+                user.bvn = bvn.strip()
+                user_fields_to_save.append('bvn')
+
+        # NIN — one-time only
+        if nin is not None:
+            if user.nin:
+                errors['nin'] = 'NIN has already been set and cannot be changed.'
+            else:
+                user.nin = nin.strip()
+                user_fields_to_save.append('nin')
+
         if errors:
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
         if user_fields_to_save:
             user.save(update_fields=user_fields_to_save)
 
+        # Profile picture
         profile_picture = request.FILES.get('profile_picture')
         if profile_picture:
             if user.role == 'agent' and hasattr(user, 'agent_profile'):
@@ -186,11 +205,44 @@ class UserProfileView(APIView):
             elif user.role == 'affiliate' and hasattr(user, 'affiliate_profile'):
                 user.affiliate_profile.profile_picture = profile_picture
                 user.affiliate_profile.save(update_fields=['profile_picture'])
-            elif hasattr(user, 'profile_picture'):
-                user.profile_picture = profile_picture
-                user.save(update_fields=['profile_picture'])
+            else:
+                user.profile_image = profile_picture
+                user.save(update_fields=['profile_image'])
 
         return Response(UserSerializer(user).data, status=status.HTTP_200_OK)
+
+
+class AgentSocialProfileUpdateView(APIView):
+    """
+    PATCH /api/account/agent-profile/
+    Lets an approved agent update their bio, social links, etc.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        agent_profile = get_object_or_404(AgentProfile, user=request.user)
+        return Response(AgentProfileSerializer(agent_profile).data)
+
+    def patch(self, request):
+        agent_profile = get_object_or_404(AgentProfile, user=request.user)
+
+        editable_fields = [
+            'bio', 'years_experience', 'specialization',
+            'facebook_url', 'instagram_url', 'twitter_url',
+            'linkedin_url', 'whatsapp_url',
+        ]
+
+        for field in editable_fields:
+            if field in request.data:
+                setattr(agent_profile, field, request.data[field])
+
+        # CV file upload
+        if 'cv' in request.FILES:
+            agent_profile.cv = request.FILES['cv']
+
+        agent_profile.save()
+        return Response(AgentProfileSerializer(agent_profile).data, status=status.HTTP_200_OK)
+    
 
 class ApplyAgentView(APIView):
     """

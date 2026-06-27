@@ -9,6 +9,7 @@ from .views import (
     PaymentViewSet,
     PaymentReminderViewSet,
     AgentPropertyStatsView,
+    ContactMessageView,
 )
 
 router = DefaultRouter()
@@ -23,5 +24,6 @@ router.register(r'payment-reminders', PaymentReminderViewSet, basename='payment-
 urlpatterns = [
     path('', include(router.urls)),  # This includes the router at the root
     path('agent/stats/', AgentPropertyStatsView.as_view(), name='agent-property-stats'),
+    path('contact/', ContactMessageView.as_view(), name='contact'),
     # path('agent/profile/', AgentProfileUpdateView.as_view(), name='agent-profile-update'),
 ]

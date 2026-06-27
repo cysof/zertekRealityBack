@@ -51,30 +51,16 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
 class UserSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
-    image_url = serializers.SerializerMethodField()  # ← added
+    image_url = serializers.SerializerMethodField()
 
     class Meta:
         model = User
         fields = [
-            'id',
-            'email',
-            'first_name',
-            'last_name',
-            'full_name',
-            'phone',
-            'bvn',
-            'nin',
-            'address',
-            'role',
-            'is_verified',
-            'is_affiliate',
-            'profile_image',
-            'image_url',  # ← added
-            'date_joined'
+            'id', 'email', 'first_name', 'last_name', 'full_name',
+            'phone', 'bvn', 'nin', 'address', 'role',
+            'is_verified', 'is_affiliate', 'profile_image', 'image_url', 'date_joined'
         ]
-        read_only_fields = [
-            'id', 'role', 'is_verified', 'is_affiliate', 'bvn', 'nin', 'date_joined'
-        ]
+        read_only_fields = ['id', 'role', 'is_verified', 'is_affiliate', 'date_joined']
 
     def get_full_name(self, obj):
         return obj.full_name
@@ -178,3 +164,19 @@ class AffiliateProfileSerializer(serializers.ModelSerializer):
             'pending_commission', 'commission_rate', 'is_approved',
             'created_at', 'updated_at',
         ]
+
+
+class UserKYCSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['bvn', 'nin']
+
+    def validate_bvn(self, value):
+        if self.instance and self.instance.bvn:
+            raise serializers.ValidationError('BVN has already been set and cannot be changed.')
+        return value
+
+    def validate_nin(self, value):
+        if self.instance and self.instance.nin:
+            raise serializers.ValidationError('NIN has already been set and cannot be changed.')
+        return value
